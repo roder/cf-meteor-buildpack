@@ -17,6 +17,22 @@ status() {
   echo "-----> $*"
 }
 
+compareSemVer () {
+  typeset    IFS='.'
+  typeset -a v1=( $1 )
+  typeset -a v2=( $2 )
+  typeset    n diff
+
+  for (( n=0; n<3; n+=1 )); do
+    diff=$((v1[n]-v2[n]))
+    if [ $diff -ne 0 ] ; then
+      [ $diff -le 0 ] && echo '-1' || echo '1'
+      return
+    fi
+  done
+  echo  '0'
+}
+
 node_version=$(curl --silent --get https://semver.io/node/resolve/0.10.x)
 
 install_node() {
@@ -50,7 +66,7 @@ install_meteor() {
   # curl https://install.meteor.com | sh
   status "Downloading Meteor install script"
   METEOR_INSTALL_SCRIPT=install_meteor.sh
-  curl https://install.meteor.com/ > $METEOR_INSTALL_SCRIPT
+  curl https://install.meteor.com/?release=$METEOR_VERSION > $METEOR_INSTALL_SCRIPT
 
   status "Installing Meteor connected to $MONGO_URL"
   sed -e '/^#!\/bin\/sh/ s/$/ -x/' \
@@ -74,7 +90,12 @@ build() {
     meteor build --directory deploy --server http://localhost:3000
     cd deploy/bundle/programs/server
     status "Installing npm dependencies"
-    npm install 2>&1 | indent
+    # Use `meteor npm install` if $METOER_VERSION is empty or >=1.3
+    if [ $(compareSemVer $METEOR_VERSION 1.3) -ge 0 ]; then
+      meteor npm install 2>&1 | indent
+    else
+      npm install 2>&1 | indent
+    fi
     mv $BUILD_DIR/.vendor $BUILD_DIR/vendor
   )
 }
